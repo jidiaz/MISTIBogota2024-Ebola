@@ -11,12 +11,12 @@ library(future) #paralelization
 # check the current active plan
 plan()
 # change the current plan to access parallelization
-plan("multicore", workers = 4)
+plan("multicore", workers = 8)
 availableCores()
 plan()
 ########################################################################################
 
-setwd("~/Documents/scRNA-Seq-MIT-Training/MISTIBogota2024-Ebola/Projects/Project4-OriginalMaterial/")
+setwd("~/MISTIBogota2024-Ebola/Projects/Project4-OriginalMaterial/")
 
 #Now lets load the data 
 matrix <- read.csv(file = "counts.csv.gz",sep = ",",row.names = 1)
