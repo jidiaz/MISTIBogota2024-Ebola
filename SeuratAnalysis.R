@@ -40,14 +40,15 @@ cell_counts_df
 write.csv(cell_counts_df, file = "cell_counts_per_sample.csv", row.names = FALSE)
 
 ## Lets do QC! Use the practical from the previous day and
-# Violin plots
 vln_plot <- VlnPlot(seuratObject, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0.0001)
-vln_plot
+ggsave("QC_filtered.png", plot = vln_plot, width = 12, height = 4, dpi = 300)
+
 plot1 <- FeatureScatter(seuratObject, feature1 = "nCount_RNA", feature2 = "percent.mt") + 
   theme(legend.position = "none") + labs(x = "n_UMIs", y = "mithocondrial_Content")
 plot2 <- FeatureScatter(seuratObject, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
   theme(legend.position = "right") + labs(x = "n_UMIs", y = "n_Genes")
-plot1 + plot2 + plot_layout(guides = "collect")
+combined_plot <- plot1 + plot2 + plot_layout(guides = "collect")
+ggsave("feature_scatter_high_res.png", plot = combined_plot, width = 12, height = 6, dpi = 300)
 
 ## Let's do doublets detection
 sce <- as.SingleCellExperiment(seuratObject)
@@ -82,7 +83,9 @@ top10 <- head(VariableFeatures(seuratObject), 10)
 # plot variable features with and without labels
 plot1 <- VariableFeaturePlot(seuratObject) + theme(legend.position="top")
 plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE) + theme(legend.position="none")
-plot1 + plot2
+HighVariableFeatures <- plot1 + plot2
+ggsave("Scatter_HVF.png", plot = HighVariableFeatures, width = 12, height = 6, dpi = 300)
+
 
 # Scaling the data
 all.genes <- rownames(seuratObject)
@@ -92,9 +95,57 @@ seuratObject <- ScaleData(seuratObject, features = all.genes)
 seuratObject <- RunPCA(seuratObject, features = VariableFeatures(object = seuratObject))
 print(seuratObject[["pca"]], dims = 1:5, nfeatures = 5)
 VizDimLoadings(seuratObject, dims = 1:2, reduction = "pca")
-DimPlot(seuratObject, reduction = "pca")
+PCA <- DimPlot(seuratObject, reduction = "pca")
+ggsave("PCA.png", plot = PCA, width = 12, height = 6, dpi = 300)
+
+# Cluster the cells
+seuratObject <- FindNeighbors(seuratObject,  dims = 1:20)
+seuratObject <- FindClusters(seuratObject, resolution=0.5)
+head(Idents(seuratObject), 5)
+identities <- Idents(seuratObject)
+clusterorder <-seuratObject$seurat_clusters
+write.csv(identities, file = "Cluster_identities.csv")
+
+# Run non-linear dimensional reduction (UMAP)
+seuratObject <- RunUMAP(seuratObject, dims = 1:20)
+umap_plot <- DimPlot(seuratObject, reduction = "umap")
+ggsave("umap_plot_high_res.png", plot = umap_plot, width = 10, height = 8, dpi = 300)
+
+# Run non-linear dimensional reduction (tSNE)
+seuratObject <- RunTSNE(seuratObject, dims = 1:20)
+tsne_plot <- DimPlot(seuratObject, reduction = "tsne")
+ggsave("tsne_plot_high_res.png", plot = tsne_plot, width = 10, height = 8, dpi = 300)
+
+# Finding differentially expressed features (cluster markers)
+levels(seuratObject)
+seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
+#seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="wilcox")
+seuratObject.markers %>% group_by(cluster) %>% slice_max(n = 2, order_by = avg_log2FC)
+filtered_markers <- seuratObject.markers[seuratObject.markers$avg_log2FC > 2 & seuratObject.markers$p_val_adj < 0.05, ]
+seuratObject.markers
+write.csv(filtered_markers, file = "Significative_markers.csv", row.names = FALSE)
+
+seuratObject.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC) -> top10
+
+# Generate the heatmap for raw counts
+heatmap_raw_counts <- DoHeatmap(seuratObject, features = top10$gene, slot = "counts")
+ggsave("heatmap_raw_counts_high_res.png", plot = heatmap_raw_counts, width = 10, height = 8, dpi = 300)
+
+# Generate the heatmap for normalized expression
+heatmap_normalized_expression <- DoHeatmap(seuratObject, features = top10$gene, slot = "data")
+ggsave("heatmap_normalized_expression_high_res.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
 
 
+cluster_markers <- print(top10, n = Inf)
+
+write.csv(cluster_markers, file = "Top10Markers_perCluster.csv", row.names = FALSE)
+
+
+################### SAVE RDS OBJECT ###########################################
+saveRDS(seuratObject, file = "seurat.RDS")
+################### READ RDS OBJECT ###########################################
+#seuratObject <- readRDS(file = "seuratObject.RDS")
+###############################################################################
 
 #check the seurat tutorial! https://satijalab.org/seurat/articles/pbmc3k_tutorial.html
 
