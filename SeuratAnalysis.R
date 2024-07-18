@@ -5,53 +5,75 @@ library(patchwork)
 library(ggplot2)
 library(svglite)
 library(scDblFinder)
+library(harmony)
 library(future) #paralelization
 
 ######################### Paralelization function ######################################
 # check the current active plan
 plan()
 # change the current plan to access parallelization
-plan("multicore", workers = 8)
+plan("multicore", workers = 4)
 availableCores()
 plan()
 ########################################################################################
 
-setwd("~/MISTIBogota2024-Ebola/Projects/Project4-OriginalMaterial/")
+setwd("~/Documents/scRNA-Seq-MIT-Training/MISTIBogota2024-Ebola/Projects/Project4-OriginalMaterial/")
 
 #Now lets load the data 
 matrix <- read.csv(file = "counts.csv.gz",sep = ",",row.names = 1)
 matrix[1:5,1:5]
 metadata <- read.csv(file = "metadata.csv",sep = ",",row.names = 1,header = T)
+rownames(metadata)<-gsub("-",".",rownames(metadata))
 head(metadata)
 ##Lets create the seurat object
-seuratObject <- CreateSeuratObject(counts = matrix[,rownames(metadata) %in% colnames(matrix)], meta.data = metadata[rownames(metadata) %in% colnames(matrix),], project = "Project4")
-seuratObject
-mito.genes<-rownames(seuratObject)[rownames(seuratObject) %in% c('ENSMMUG00000028704','ENSMMUG00000028703','ENSMMUG00000028702','ENSMMUG00000028701','ENSMMUG00000028700','ND1',
+SO <- CreateSeuratObject(counts = matrix[,rownames(metadata) %in% colnames(matrix)], meta.data = metadata[rownames(metadata) %in% colnames(matrix),], project = "Project4")
+mito.genes<-rownames(SO)[rownames(SO) %in% c('ENSMMUG00000028704','ENSMMUG00000028703','ENSMMUG00000028702','ENSMMUG00000028701','ENSMMUG00000028700','ND1',
                                                                  'ENSMMUG00000028698','ENSMMUG00000028697','ENSMMUG00000028696','ND2','ENSMMUG00000028694','ENSMMUG00000028693','ENSMMUG00000028692','ENSMMUG00000028691',
                                                                  'ENSMMUG00000028690','COX1','ENSMMUG00000028688','ENSMMUG00000028687','COX2','ENSMMUG00000028685','ATP8','ATP6','COX3','ENSMMUG00000028681','ND3','ENSMMUG00000028679','ND4L',
                                                                  'ND4','ENSMMUG00000028676','ENSMMUG00000028675','ENSMMUG00000028674','ND5','ND6','ENSMMUG00000028671','CYTB','ENSMMUG00000028669','ENSMMUG00000028668')]
-seuratObject[["percent.mt"]] <- PercentageFeatureSet(seuratObject, features = mito.genes)
+SO[["percent.mt"]] <- PercentageFeatureSet(SO, features = mito.genes)
+SO
 
 ##How many cells do we have in each sample? hbu each time point (DPI)?
-metadata1 <-seuratObject@meta.data
+metadata1 <-SO@meta.data
 cell_counts <- table(metadata1$orig.ident)
 cell_counts_df <- as.data.frame(cell_counts)
-cell_counts_df
+cell_counts
 write.csv(cell_counts_df, file = "cell_counts_per_sample.csv", row.names = FALSE)
 
-## Lets do QC! Use the practical from the previous day and
-vln_plot <- VlnPlot(seuratObject, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0.0001)
-ggsave("QC_filtered.png", plot = vln_plot, width = 12, height = 4, dpi = 300)
+cell_countsDPI <- table(metadata1$DPI)
+cell_countsDPI_df <- as.data.frame(cell_countsDPI)
+cell_countsDPI
+write.csv(cell_countsDPI_df, file = "cell_counts_per_DPI.csv", row.names = FALSE)
 
-plot1 <- FeatureScatter(seuratObject, feature1 = "nCount_RNA", feature2 = "percent.mt") + 
+
+## Lets do QC! Use the practical from the previous day and
+vln_plot_animal <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001, group.by = "animal") +
+  theme(legend.position = "none")
+vln_plot_DPI <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001, group.by = "DPI") +
+  theme(legend.position = "none")
+vln_plot_feat <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001) +
+  theme(legend.position = "none")
+vln_plot_count <- VlnPlot(SO, features = "nCount_RNA", pt.size = 0.0001) +
+  theme(legend.position = "none")
+vln_plot_mt <- VlnPlot(SO, features = "percent.mt", pt.size = 0.0001) +
+  theme(legend.position = "none")
+
+ggsave("01A.QC_filtered.png", plot = vln_plot_feat, width = 24, height = 12, dpi = 300)
+ggsave("01B.QC_filtered.png", plot = vln_plot_count, width = 12, height = 4, dpi = 300)
+ggsave("01C.QC_filtered.png", plot = vln_plot_mt, width = 12, height = 4, dpi = 300)
+ggsave("01D.QC_filtered.png", plot = vln_plot_animal, width = 24, height = 12, dpi = 300)
+ggsave("01E.QC_filtered.png", plot = vln_plot_DPI, width = 24, height = 12, dpi = 300)
+
+plot1 <- FeatureScatter(SO, feature1 = "nCount_RNA", feature2 = "percent.mt") + 
   theme(legend.position = "none") + labs(x = "n_UMIs", y = "mithocondrial_Content")
-plot2 <- FeatureScatter(seuratObject, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
-  theme(legend.position = "right") + labs(x = "n_UMIs", y = "n_Genes")
+plot2 <- FeatureScatter(SO, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
+  theme(legend.position = "none") + labs(x = "n_UMIs", y = "n_Genes")
 combined_plot <- plot1 + plot2 + plot_layout(guides = "collect")
-ggsave("feature_scatter_high_res.png", plot = combined_plot, width = 12, height = 6, dpi = 300)
+ggsave("02.feature_scatter_high_res.png", plot = combined_plot, width = 12, height = 6, dpi = 300)
 
 ## Let's do doublets detection
-sce <- as.SingleCellExperiment(seuratObject)
+sce <- as.SingleCellExperiment(SO)
 sce
 set.seed(123)
 results <- scDblFinder(sce, returnType = 'table') %>%
@@ -69,55 +91,133 @@ write.table(results, outfile, sep='\t', quote=F,
 keep = results %>%
   dplyr::filter(class == "singlet") %>%
   rownames()
-seuratObject = seuratObject[, keep]
-seuratObject
+SO= SO[, keep]
+SO
+
+##How many cells do we have in each sample? hbu each time point (DPI)? AFTER removing duplets
+metadata2 <-SO@meta.data
+cell_counts <- table(metadata2$orig.ident)
+cell_counts_df <- as.data.frame(cell_counts)
+write.csv(cell_counts_df, file = "cell_counts_per_sample_nodups.csv", row.names = FALSE)
+
+cell_countsDPI <- table(metadata2$DPI)
+cell_countsDPI_df <- as.data.frame(cell_countsDPI)
+write.csv(cell_countsDPI_df, file = "cell_counts_per_DPI_nodups.csv", row.names = FALSE)
 
 ## Let's normalize the dataset
-
-seuratObject <- NormalizeData(seuratObject, normalization.method = "LogNormalize", scale.factor = 10000, verbose = FALSE)
+SO <- NormalizeData(SO, normalization.method = "LogNormalize", scale.factor = 10000, verbose = FALSE)
 
 ## Let's look for HVF
-seuratObject <- FindVariableFeatures(seuratObject, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
-top10 <- head(VariableFeatures(seuratObject), 10)
+SO <- FindVariableFeatures(SO, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+top10 <- head(VariableFeatures(SO), 10)
 
 # plot variable features with and without labels
-plot1 <- VariableFeaturePlot(seuratObject) + theme(legend.position="top")
+plot1 <- VariableFeaturePlot(SO) + theme(legend.position="top")
 plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE) + theme(legend.position="none")
 HighVariableFeatures <- plot1 + plot2
-ggsave("Scatter_HVF.png", plot = HighVariableFeatures, width = 12, height = 6, dpi = 300)
-
+ggsave("03.Scatter_HVF.png", plot = HighVariableFeatures, width = 12, height = 6, dpi = 300)
 
 # Scaling the data
-all.genes <- rownames(seuratObject)
-seuratObject <- ScaleData(seuratObject, features = all.genes)
+all.genes <- rownames(SO)
+SO <- ScaleData(SO, features = all.genes)
 
 # Perform linear dimensional reduction
-seuratObject <- RunPCA(seuratObject, features = VariableFeatures(object = seuratObject))
-print(seuratObject[["pca"]], dims = 1:5, nfeatures = 5)
-VizDimLoadings(seuratObject, dims = 1:2, reduction = "pca")
-PCA <- DimPlot(seuratObject, reduction = "pca")
-ggsave("PCA.png", plot = PCA, width = 12, height = 6, dpi = 300)
+SO <- RunPCA(SO, features = VariableFeatures(object = SO))
+print(SO[["pca"]], dims = 1:5, nfeatures = 5)
+VizDimLoadings(SO, dims = 1:2, reduction = "pca")
+PCA <- DimPlot(SO, reduction = "pca")
+ggsave("04.PCA.png", plot = PCA, width = 12, height = 6, dpi = 300)
 
 # Cluster the cells
-seuratObject <- FindNeighbors(seuratObject,  dims = 1:20)
-seuratObject <- FindClusters(seuratObject, resolution=0.5)
-head(Idents(seuratObject), 5)
-identities <- Idents(seuratObject)
-clusterorder <-seuratObject$seurat_clusters
+SO <- FindNeighbors(SO,  dims = 1:20)
+SO <- FindClusters(SO, resolution=0.5)
+head(Idents(SO), 5)
+identities <- Idents(SO)
+clusterorder <-SO$seurat_clusters
 write.csv(identities, file = "Cluster_identities.csv")
 
 # Run non-linear dimensional reduction (UMAP)
-seuratObject <- RunUMAP(seuratObject, dims = 1:20)
-umap_plot <- DimPlot(seuratObject, reduction = "umap")
-ggsave("umap_plot_high_res.png", plot = umap_plot, width = 10, height = 8, dpi = 300)
+SO <- RunUMAP(SO, dims = 1:20)
+umap_plot <- DimPlot(SO, reduction = "umap")
+ggsave("05A.umap_plot_high_res.png", plot = umap_plot, width = 10, height = 8, dpi = 300)
 
 # Run non-linear dimensional reduction (tSNE)
-seuratObject <- RunTSNE(seuratObject, dims = 1:20)
-tsne_plot <- DimPlot(seuratObject, reduction = "tsne")
-ggsave("tsne_plot_high_res.png", plot = tsne_plot, width = 10, height = 8, dpi = 300)
+SO <- RunTSNE(SO, dims = 1:20)
+tsne_plot <- DimPlot(SO, reduction = "tsne")
+ggsave("05B.tsne_plot_high_res.png", plot = tsne_plot, width = 10, height = 8, dpi = 300)
+
+#Plot clusters against metadata for batch errors
+umap_plot_dpi <- DimPlot(SO, reduction = "umap",group.by = "DPI")
+umap_plot_cell <- DimPlot(SO, reduction = "umap",group.by = "cell")
+umap_plot_animal <- DimPlot(SO, reduction = "umap",group.by = "animal")
+umap_plot_stype <- DimPlot(SO, reduction = "umap",group.by = "sample_type")
+ggsave("06A.umap_plot_high_res_dpi.png", plot = umap_plot_dpi, width = 10, height = 8, dpi = 300)
+ggsave("06B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, height = 8, dpi = 300)
+ggsave("06C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
+ggsave("06D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
+
+#Batch correction
+options(repr.plot.height = 4, repr.plot.width = 6)
+SOharmony <- SO %>%
+  RunHarmony("cell", plot_convergence = TRUE)
+
+harmony_embeddings <- Embeddings(SOharmony, 'harmony')
+harmony_embeddings[1:5, 1:5]
+
+#Clustering 
+SOharmony <- RunUMAP(SOharmony, reduction = "harmony", dims = 1:20) %>%
+  FindNeighbors(reduction = "harmony", dims = 1:20) %>%
+  FindClusters(resolution = 0.5)
+
+#Plot clusters against metadata after batch correction
+umap_plot_dpi <- DimPlot(SOharmony, reduction = "umap",group.by = "DPI")
+umap_plot_cell <- DimPlot(SOharmony, reduction = "umap",group.by = "cell")
+umap_plot_animal <- DimPlot(SOharmony, reduction = "umap",group.by = "animal")
+umap_plot_stype <- DimPlot(SOharmony, reduction = "umap",group.by = "sample_type")
+ggsave("07A.umap_plot_high_res_dpi.png", plot = umap_plot_dpi, width = 10, height = 8, dpi = 300)
+ggsave("07B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, height = 8, dpi = 300)
+ggsave("07C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
+ggsave("07D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
+
+#Integration metrics
+plot_integrated_clusters = function (srat, batchcolumn) {
+  ## take an integrated Seurat object, plot distributions over orig.ident
+  library(Seurat)
+  library(patchwork)
+  library(ggplot2)
+  library(reshape2)
+  library(RColorBrewer)
+  
+  
+  count_table <- table(srat@meta.data$seurat_clusters, srat@meta.data[[batchcolumn]])
+  count_mtx   <- as.data.frame.matrix(count_table)
+  count_mtx$cluster <- rownames(count_mtx)
+  melt_mtx    <- melt(count_mtx)
+  melt_mtx$cluster <- as.factor(melt_mtx$cluster)
+  
+  cluster_size   <- aggregate(value ~ cluster, data = melt_mtx, FUN = sum)
+  
+  sorted_labels <- paste(sort(as.integer(levels(cluster_size$cluster)),decreasing = T))
+  cluster_size$cluster <- factor(cluster_size$cluster,levels = sorted_labels)
+  melt_mtx$cluster <- factor(melt_mtx$cluster,levels = sorted_labels)
+  
+  colnames(melt_mtx)[2] <- "dataset"
+  
+  
+  p1 <- ggplot(cluster_size, aes(y= cluster,x = value)) + geom_bar(position="dodge", stat="identity",fill = "grey60") +
+    theme_bw() + scale_x_log10() + xlab("Cells per cluster, log10 scale") + ylab("")
+  p2 <- ggplot(melt_mtx,aes(x=cluster,y=value,fill=dataset)) +
+    geom_bar(position="fill", stat="identity") + theme_bw() + coord_flip() +
+    scale_fill_brewer(palette = "Set2") +
+    ylab("Fraction of cells in each dataset") + xlab("Cluster number") + theme(legend.position="top")
+  
+  p2 + p1 + plot_layout(widths = c(3,1))
+}
+
+plot_integrated_clusters(SOharmony, 'cell')
 
 # Finding differentially expressed features (cluster markers)
-levels(seuratObject)
+levels(SOharmony)
 seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
 #seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="wilcox")
 seuratObject.markers %>% group_by(cluster) %>% slice_max(n = 2, order_by = avg_log2FC)
