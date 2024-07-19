@@ -468,9 +468,33 @@ ggsave("20B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, hei
 ggsave("20C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
 ggsave("20D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
 
+ebola_counts_plot <- FeaturePlot(SO4, features="EBOVper")
+ggsave("20E.umap_plot_EBOV_counts.png", plot = ebola_counts_plot, width = 10, height = 8, dpi = 300)
 
 
 ##Manual Cell Annotation
+cd8 <- FeaturePlot(SO4, features=c("CD3D","GZMB","GNLY"))
+cd4 <- FeaturePlot(SO4, features=c("CD3D","IL7R"))
+cDC <- FeaturePlot(SO4, features=c("FLT3","IRF8"))
+pDC <- FeaturePlot(SO4, features=c("GZMB","IRF8"))
+neutrophils <- FeaturePlot(SO4, features=c("CD177","LCN2"))
+platelets <- FeaturePlot(SO4, features=c("PF4","CAVIN2"))
+plasmablast <- FeaturePlot(SO4, features=c("MZB1","IGHM"))
+monocytes <- FeaturePlot(SO4, features=c("CFD","LYZ"))
+B <- FeaturePlot(SO4, features=c("MS4A1","IGHM"))
+NK <- FeaturePlot(SO4, features=c("GNLY","NKG7"))
+
+ggsave("21A.umap_plot_CD8.png", plot = cd8, width = 10, height = 8, dpi = 300)
+ggsave("21B.umap_plot_CD4.png", plot = cd4, width = 10, height = 8, dpi = 300)
+ggsave("21C.umap_plot_cDC.png", plot = cDC, width = 10, height = 8, dpi = 300)
+ggsave("21D.umap_plot_pDC.png", plot = pDC, width = 10, height = 8, dpi = 300)
+ggsave("21E.umap_plot_neut.png", plot = neutrophils, width = 10, height = 8, dpi = 300)
+ggsave("21F.umap_plot_plat.png", plot = platelets, width = 10, height = 8, dpi = 300)
+ggsave("21G.umap_plot_plas.png", plot = plasmablast, width = 10, height = 8, dpi = 300)
+ggsave("21H.umap_plot_mono.png", plot = monocytes, width = 10, height = 8, dpi = 300)
+ggsave("21I.umap_plot_B.png", plot = B, width = 10, height = 8, dpi = 300)
+ggsave("21J.umap_plot_NK.png", plot = NK, width = 10, height = 8, dpi = 300)
+
 
 
 # Finding differentially expressed features (cluster markers)
