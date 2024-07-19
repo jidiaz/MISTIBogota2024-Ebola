@@ -17,7 +17,7 @@ availableCores()
 plan()
 ########################################################################################
 
-setwd("~/Documents/scRNA-Seq-MIT-Training/MISTIBogota2024-Ebola/Projects/Project4-OriginalMaterial/")
+setwd("~/MISTIBogota2024-Ebola/Projects/Project4-OriginalMaterial/")
 
 #Now lets load the data 
 matrix <- read.csv(file = "counts.csv.gz",sep = ",",row.names = 1)
@@ -47,23 +47,26 @@ cell_countsDPI
 write.csv(cell_countsDPI_df, file = "cell_counts_per_DPI.csv", row.names = FALSE)
 
 
-## Lets do QC! Use the practical from the previous day and
-vln_plot_animal <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001, group.by = "animal") +
+## Lets do QC!
+vln_plot_feat_animal <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001, group.by = "animal") +
   theme(legend.position = "none")
-vln_plot_DPI <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001, group.by = "DPI") +
+vln_plot_count_animal <- VlnPlot(SO, features = "nCount_RNA", pt.size = 0.0001, group.by = "animal") +
   theme(legend.position = "none")
-vln_plot_feat <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001) +
+vln_plot_mt_animal <- VlnPlot(SO, features = "percent.mt", pt.size = 0.0001, group.by = "animal") +
   theme(legend.position = "none")
-vln_plot_count <- VlnPlot(SO, features = "nCount_RNA", pt.size = 0.0001) +
+vln_plot_feat_DPI <- VlnPlot(SO, features = "nFeature_RNA", pt.size = 0.0001, group.by = "DPI") +
   theme(legend.position = "none")
-vln_plot_mt <- VlnPlot(SO, features = "percent.mt", pt.size = 0.0001) +
+vln_plot_count_DPI <- VlnPlot(SO, features = "nCount_RNA", pt.size = 0.0001, group.by = "DPI") +
+  theme(legend.position = "none")
+vln_plot_mt_DPI <- VlnPlot(SO, features = "percent.mt", pt.size = 0.0001, group.by = "DPI") +
   theme(legend.position = "none")
 
-ggsave("01A.QC_filtered.png", plot = vln_plot_feat, width = 24, height = 12, dpi = 300)
-ggsave("01B.QC_filtered.png", plot = vln_plot_count, width = 12, height = 4, dpi = 300)
-ggsave("01C.QC_filtered.png", plot = vln_plot_mt, width = 12, height = 4, dpi = 300)
-ggsave("01D.QC_filtered.png", plot = vln_plot_animal, width = 24, height = 12, dpi = 300)
-ggsave("01E.QC_filtered.png", plot = vln_plot_DPI, width = 24, height = 12, dpi = 300)
+ggsave("01A.QC_filtered.png", plot = vln_plot_feat_animal, width = 24, height = 12, dpi = 300)
+ggsave("01B.QC_filtered.png", plot = vln_plot_count_animal, width = 12, height = 4, dpi = 300)
+ggsave("01C.QC_filtered.png", plot = vln_plot_mt_animal, width = 12, height = 4, dpi = 300)
+ggsave("01D.QC_filtered.png", plot = vln_plot_feat_DPI, width = 24, height = 12, dpi = 300)
+ggsave("01E.QC_filtered.png", plot = vln_plot_count_DPI, width = 24, height = 12, dpi = 300)
+ggsave("01F.QC_filtered.png", plot = vln_plot_mt_DPI, width = 24, height = 12, dpi = 300)
 
 plot1 <- FeatureScatter(SO, feature1 = "nCount_RNA", feature2 = "percent.mt") + 
   theme(legend.position = "none") + labs(x = "n_UMIs", y = "mithocondrial_Content")
@@ -128,9 +131,43 @@ VizDimLoadings(SO, dims = 1:2, reduction = "pca")
 PCA <- DimPlot(SO, reduction = "pca")
 ggsave("04.PCA.png", plot = PCA, width = 12, height = 6, dpi = 300)
 
+pca = SO[["pca"]]
+
+## get the eigenvalues
+evs = pca@stdev^2
+total.var = pca@misc$total.variance
+varExplained = evs/total.var
+pca.data = data.frame(PC=factor(1:length(evs)),
+                      percVar=varExplained*100)
+pca.data$cumulVar = cumsum(pca.data$percVar)
+
+head(pca.data, 20)
+
+scPlot <- pca.data[1:50,] %>%
+  ggplot(aes(x=PC, y=percVar)) +
+  geom_bar(stat='identity') +
+  geom_hline(yintercept = 1, colour="red", linetype=3) +
+  labs(title="Variance Explanation by PCA") +
+  xlab("Principal Components") +
+  ylab("Percentage of Explained Variance") +
+  theme_bw()
+scPlot
+ggsave("04A.PCA_geom_bar.png",plot = scPlot, bg = 'white')
+
+scPlot <- pca.data[1:50,] %>%
+  ggplot(aes(x=PC, y=cumulVar)) +
+  geom_bar(stat='identity') +
+  geom_hline(yintercept = 50, colour="red", linetype=3) +
+  labs(title="Cumulative Variance Explanation by PCA") +
+  xlab("Principal Components") +
+  ylab("Cumulative Percentage of Explained Variance") +
+  theme_bw()
+scPlot
+ggsave("04B.PCA_geom_bar.png",plot = scPlot, bg = 'white')
+
 # Cluster the cells
 SO <- FindNeighbors(SO,  dims = 1:20)
-SO <- FindClusters(SO, resolution=0.5)
+SO <- FindClusters(SO, resolution=0.1)
 head(Idents(SO), 5)
 identities <- Idents(SO)
 clusterorder <-SO$seurat_clusters
@@ -155,6 +192,9 @@ ggsave("06A.umap_plot_high_res_dpi.png", plot = umap_plot_dpi, width = 10, heigh
 ggsave("06B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, height = 8, dpi = 300)
 ggsave("06C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
 ggsave("06D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
+
+
+
 
 #Batch correction
 options(repr.plot.height = 4, repr.plot.width = 6)
