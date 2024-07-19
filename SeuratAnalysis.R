@@ -4,8 +4,15 @@ library(Seurat)
 library(patchwork)
 library(ggplot2)
 library(svglite)
+##Libraries dublets
 library(scDblFinder)
+## Libraries integration and batch correction
 library(harmony)
+##Libraries cell annotation
+library(celldex)
+library(SingleR)
+library(pheatmap)
+
 library(future) #paralelization
 
 ######################### Paralelization function ######################################
@@ -193,7 +200,44 @@ ggsave("06B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, hei
 ggsave("06C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
 ggsave("06D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
 
+# Finding differentially expressed features (cluster markers)
+levels(SO)
+SO.markers <- FindAllMarkers(SO, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
+#seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="wilcox")
 
+SO.markers %>% group_by(cluster) %>% slice_max(n = 2, order_by = avg_log2FC)
+filtered_markers <- SO.markers[SO.markers$avg_log2FC > 2 & SO.markers$p_val_adj < 0.05, ]
+SO.markers
+write.csv(filtered_markers, file = "Significative_markers.csv", row.names = FALSE)
+
+SO.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC) -> top10
+
+# Generate the heatmap for raw counts
+heatmap_raw_counts <- DoHeatmap(SO, features = top10$gene, slot = "counts")
+ggsave("07A.heatmap_raw_counts_high_res01.png", plot = heatmap_raw_counts, width = 10, height = 8, dpi = 300)
+
+# Generate the heatmap for normalized expression
+heatmap_normalized_expression <- DoHeatmap(SO, features = top10$gene, slot = "data")
+ggsave("07B.heatmap_normalized_expression_high_res01.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
+
+#Cell annotation
+ref = BlueprintEncodeData()
+ref
+
+sce = as.SingleCellExperiment(SO)
+pred = SingleR(sce, ref=ref, labels=ref$label.main)
+table(pred$labels)
+cluster_markers <- print(top10, n = Inf)
+
+table_celltypes_bycluster = table(Assigned=pred$pruned.labels,
+                 cluster=sce$seurat_clusters)
+table_celltypes_bycluster
+
+pheatmap(log2(table_celltypes_bycluster + 1), filename = "08.CellAnnotation_pheatmap.png")
+
+write.csv(cluster_markers, file = "Top10Markers_perCluster.csv", row.names = FALSE)
+
+scPlot <- FeaturePlot(SO, features=c("COL5A2"))
 
 
 #Batch correction
