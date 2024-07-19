@@ -495,31 +495,39 @@ ggsave("21H.umap_plot_mono.png", plot = monocytes, width = 10, height = 8, dpi =
 ggsave("21I.umap_plot_B.png", plot = B, width = 10, height = 8, dpi = 300)
 ggsave("21J.umap_plot_NK.png", plot = NK, width = 10, height = 8, dpi = 300)
 
-
+new.clusters.ids <- c("T CD4+", "B", "Neutrophils", "T CD4+", "Unclassified" ,"T CD8+" , "Monocytes", "Neutrophils", "T CD8+")
+names(new.clusters.ids) <- levels(SO4)
+SO4 <- RenameIdents(SO4.markers,new.clusters.ids)
+celannot <-DimPlot(SO4,reduction="umap",label=FALSE,pt.size=0.5)
+ggsave("22.umap_annotated.png", plot = celannot, width = 10, height = 8, dpi = 300)
 
 # Finding differentially expressed features (cluster markers)
-levels(SO4)
-SO4.markers <- FindAllMarkers(SO4, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
+levels(SO5)
+SO5.markers <- FindAllMarkers(SO5, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
 #seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="wilcox")
 
 
-SO4.markers %>% group_by(label) %>% slice_max(n = 2, order_by = avg_log2FC)
-filtered_markers <- SO4.markers[SO4.markers$avg_log2FC > 2 & SO4.markers$p_val_adj < 0.05, ]
-SO4.markers
+SO5.markers %>% group_by(cluster) %>% slice_max(n = 2, order_by = avg_log2FC)
+filtered_markers <- SO5.markers[SO5.markers$avg_log2FC > 2 & SO5.markers$p_val_adj < 0.05, ]
+SO5.markers
 write.csv(filtered_markers, file = "Significative_markers_nodogs_cellannot.csv", row.names = FALSE)
 
-SO4.markers %>% group_by(label) %>% top_n(n = 10, wt = avg_log2FC) -> top10
+SO5.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC) -> top10
 
 # Generate the heatmap for raw counts
-heatmap_raw_counts <- DoHeatmap(SO4, features = top10$gene, slot = "counts")
-ggsave("21A.heatmap_raw_counts_high_res02.png", plot = heatmap_raw_counts, width = 10, height = 8, dpi = 300)
+heatmap_raw_counts <- DoHeatmap(SO5, features = top10$gene, slot = "counts") + scale_fill_gradient2(high="blue",mid="white",low="red")
+ggsave("23A.heatmap_raw_counts_high_res02.png", plot = heatmap_raw_counts, width = 10, height = 8, dpi = 300)
 
 # Generate the heatmap for normalized expression
-heatmap_normalized_expression <- DoHeatmap(SO2, features = top10$gene, slot = "data")
-ggsave("21B.heatmap_normalized_expression_high_res02.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
+heatmap_normalized_expression <- DoHeatmap(SO5, features = top10$gene, slot = "data")+ scale_fill_gradient2(high="blue",mid="white",low="red")
+ggsave("23B.heatmap_normalized_expression_high_res02.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
 
-scPlot <- DoHeatmap(SO4, features = c("MX1", "MIX2","IFIT1","IFIT2","IFIT3","IRF1","IRF7","IRF9","IFI16","ISG15","STAT1","STAT2")) + NoLegend()
-ggsave("21C.heatmap_interferonGenes.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
+heatmap_final <- DoHeatmap(SO5, features = c("MX1", "MX2","IFIT1","IFIT2","IFIT3","IRF1","IRF7","IRF9","IFI16","ISG15","STAT1","STAT2")) + NoLegend()+ scale_fill_gradient2(high="blue",mid="white",low="red")
+ggsave("23C.heatmap_interferonGenes.png", plot = heatmap_final, width = 10, height = 8, dpi = 300)
+
+
+ebola_counts_plot <- FeaturePlot(SO5, features="EBOVper",cols=c("aliceblue","red")) 
+ggsave("25D.umap_plot_EBOV_counts.png", plot = ebola_counts_plot, width = 10, height = 8, dpi = 300)
 
 
 ##OLD INFO
