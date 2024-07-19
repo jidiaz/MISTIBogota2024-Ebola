@@ -238,7 +238,263 @@ pheatmap(log2(table_celltypes_bycluster + 1), filename = "08.CellAnnotation_phea
 write.csv(cluster_markers, file = "Top10Markers_perCluster.csv", row.names = FALSE)
 
 scPlot <- FeaturePlot(SO, features=c("COL5A2"))
+ggsave("08A.umap_plot_COL5A2.png", plot = scPlot, width = 10, height = 8, dpi = 300)
+scPlot <- FeaturePlot(SO, features=c("SLC20A1"))
+ggsave("08B.umap_plot_SLC20A1.png", plot = scPlot, width = 10, height = 8, dpi = 300)
 
+
+#Filter out cluster 3 = dog cells
+SO2 <- SO[,as.vector(SO@meta.data$seurat_clusters!=3)]
+SO2
+
+##How many cells do we have in each sample? hbu each time point (DPI)?
+metadata1 <-SO2@meta.data
+cell_counts <- table(metadata1$orig.ident)
+cell_counts_df <- as.data.frame(cell_counts)
+cell_counts
+write.csv(cell_counts_df, file = "cell_counts_per_sample_nodog.csv", row.names = FALSE)
+
+cell_countsDPI <- table(metadata1$DPI)
+cell_countsDPI_df <- as.data.frame(cell_countsDPI)
+cell_countsDPI
+write.csv(cell_countsDPI_df, file = "cell_counts_per_DPI_nodog.csv", row.names = FALSE)
+
+
+## Lets do QC!
+vln_plot_feat_animal <- VlnPlot(SO2, features = "nFeature_RNA", pt.size = 0.0001, group.by = "animal") +
+  theme(legend.position = "none")
+vln_plot_count_animal <- VlnPlot(SO2, features = "nCount_RNA", pt.size = 0.0001, group.by = "animal") +
+  theme(legend.position = "none")
+vln_plot_mt_animal <- VlnPlot(SO2, features = "percent.mt", pt.size = 0.0001, group.by = "animal") +
+  theme(legend.position = "none")
+vln_plot_feat_DPI <- VlnPlot(SO2, features = "nFeature_RNA", pt.size = 0.0001, group.by = "DPI") +
+  theme(legend.position = "none")
+vln_plot_count_DPI <- VlnPlot(SO2, features = "nCount_RNA", pt.size = 0.0001, group.by = "DPI") +
+  theme(legend.position = "none")
+vln_plot_mt_DPI <- VlnPlot(SO2, features = "percent.mt", pt.size = 0.0001, group.by = "DPI") +
+  theme(legend.position = "none")
+
+ggsave("09A.QC_filtered.png", plot = vln_plot_feat_animal, width = 24, height = 12, dpi = 300)
+ggsave("09B.QC_filtered.png", plot = vln_plot_count_animal, width = 12, height = 4, dpi = 300)
+ggsave("09C.QC_filtered.png", plot = vln_plot_mt_animal, width = 12, height = 4, dpi = 300)
+ggsave("09D.QC_filtered.png", plot = vln_plot_feat_DPI, width = 24, height = 12, dpi = 300)
+ggsave("09E.QC_filtered.png", plot = vln_plot_count_DPI, width = 24, height = 12, dpi = 300)
+ggsave("09F.QC_filtered.png", plot = vln_plot_mt_DPI, width = 24, height = 12, dpi = 300)
+
+plot1 <- FeatureScatter(SO2, feature1 = "nCount_RNA", feature2 = "percent.mt") + 
+  theme(legend.position = "none") + labs(x = "n_UMIs", y = "mithocondrial_Content")
+plot2 <- FeatureScatter(SO2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
+  theme(legend.position = "none") + labs(x = "n_UMIs", y = "n_Genes")
+combined_plot <- plot1 + plot2 + plot_layout(guides = "collect")
+ggsave("10.feature_scatter_high_res.png", plot = combined_plot, width = 12, height = 6, dpi = 300)
+
+## Let's do doublets detection
+sce <- as.SingleCellExperiment(SO2)
+sce
+set.seed(456)
+results <- scDblFinder(sce, returnType = 'table') %>%
+  as.data.frame() %>%
+  filter(type == 'real')
+head(results)
+
+results %>%
+  dplyr::count(class)
+
+outfile = file.path('Ebola_doubletFile_nodog.txt')
+write.table(results, outfile, sep='\t', quote=F,
+            col.names=TRUE, row.names=TRUE)
+
+keep = results %>%
+  dplyr::filter(class == "singlet") %>%
+  rownames()
+SO2 = SO2[, keep]
+SO2
+
+##How many cells do we have in each sample? hbu each time point (DPI)? AFTER removing duplets
+metadata2 <-SO2@meta.data
+cell_counts <- table(metadata2$orig.ident)
+cell_counts_df <- as.data.frame(cell_counts)
+write.csv(cell_counts_df, file = "cell_counts_per_sample_nodups_nodog.csv", row.names = FALSE)
+
+cell_countsDPI <- table(metadata2$DPI)
+cell_countsDPI_df <- as.data.frame(cell_countsDPI)
+write.csv(cell_countsDPI_df, file = "cell_counts_per_DPI_nodups_nodog.csv", row.names = FALSE)
+
+## Let's normalize the dataset
+SO2 <- NormalizeData(SO2, normalization.method = "LogNormalize", scale.factor = 10000, verbose = FALSE)
+
+## Let's look for HVF
+SO2 <- FindVariableFeatures(SO2, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+top10 <- head(VariableFeatures(SO2), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(SO2) + theme(legend.position="top")
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE) + theme(legend.position="none")
+HighVariableFeatures <- plot1 + plot2
+ggsave("11.Scatter_HVF_nodogs.png", plot = HighVariableFeatures, width = 12, height = 6, dpi = 300)
+
+# Scaling the data
+all.genes <- rownames(SO2)
+SO2 <- ScaleData(SO2, features = all.genes)
+
+# Perform linear dimensional reduction
+SO2 <- RunPCA(SO2, features = VariableFeatures(object = SO2))
+print(SO2[["pca"]], dims = 1:5, nfeatures = 5)
+VizDimLoadings(SO2, dims = 1:2, reduction = "pca")
+PCA <- DimPlot(SO2, reduction = "pca")
+ggsave("12.PCA.png", plot = PCA, width = 12, height = 6, dpi = 300)
+
+pca = SO2[["pca"]]
+
+## get the eigenvalues
+evs = pca@stdev^2
+total.var = pca@misc$total.variance
+varExplained = evs/total.var
+pca.data = data.frame(PC=factor(1:length(evs)),
+                      percVar=varExplained*100)
+pca.data$cumulVar = cumsum(pca.data$percVar)
+
+head(pca.data, 20)
+
+scPlot <- pca.data[1:50,] %>%
+  ggplot(aes(x=PC, y=percVar)) +
+  geom_bar(stat='identity') +
+  geom_hline(yintercept = 1, colour="red", linetype=3) +
+  labs(title="Variance Explanation by PCA") +
+  xlab("Principal Components") +
+  ylab("Percentage of Explained Variance") +
+  theme_bw()
+scPlot
+ggsave("12A.PCA_geom_bar.png",plot = scPlot, bg = 'white')
+
+scPlot <- pca.data[1:50,] %>%
+  ggplot(aes(x=PC, y=cumulVar)) +
+  geom_bar(stat='identity') +
+  geom_hline(yintercept = 50, colour="red", linetype=3) +
+  labs(title="Cumulative Variance Explanation by PCA") +
+  xlab("Principal Components") +
+  ylab("Cumulative Percentage of Explained Variance") +
+  theme_bw()
+scPlot
+ggsave("12B.PCA_geom_bar.png",plot = scPlot, bg = 'white')
+
+# Cluster the cells
+SO2 <- FindNeighbors(SO2,  dims = 1:20)
+SO2 <- FindClusters(SO2, resolution=0.25)
+head(Idents(SO2), 5)
+identities <- Idents(SO2)
+clusterorder <-SO2$seurat_clusters
+write.csv(identities, file = "Cluster_identities_nodogs.csv")
+
+# Run non-linear dimensional reduction (UMAP)
+SO2 <- RunUMAP(SO2, dims = 1:20)
+umap_plot <- DimPlot(SO2, reduction = "umap")
+ggsave("13A.umap_plot_high_res01.png", plot = umap_plot, width = 10, height = 8, dpi = 300)
+
+#Plot clusters against metadata for batch errors
+umap_plot_dpi <- DimPlot(SO2, reduction = "umap",group.by = "DPI")
+umap_plot_cell <- DimPlot(SO2, reduction = "umap",group.by = "cell")
+umap_plot_animal <- DimPlot(SO2, reduction = "umap",group.by = "animal")
+umap_plot_stype <- DimPlot(SO2, reduction = "umap",group.by = "sample_type")
+ggsave("14A.umap_plot_high_res_dpi.png", plot = umap_plot_dpi, width = 10, height = 8, dpi = 300)
+ggsave("14B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, height = 8, dpi = 300)
+ggsave("14C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
+ggsave("14D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
+
+# Finding differentially expressed features (cluster markers)
+levels(SO2)
+SO2.markers <- FindAllMarkers(SO2, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
+#seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="wilcox")
+
+SO2.markers %>% group_by(cluster) %>% slice_max(n = 2, order_by = avg_log2FC)
+filtered_markers <- SO2.markers[SO2.markers$avg_log2FC > 2 & SO2.markers$p_val_adj < 0.05, ]
+SO2.markers
+write.csv(filtered_markers, file = "Significative_markers_nodogs.csv", row.names = FALSE)
+
+SO2.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC) -> top10
+
+# Generate the heatmap for raw counts
+heatmap_raw_counts <- DoHeatmap(SO2, features = top10$gene, slot = "counts")
+ggsave("15A.heatmap_raw_counts_high_res02.png", plot = heatmap_raw_counts, width = 10, height = 8, dpi = 300)
+
+# Generate the heatmap for normalized expression
+heatmap_normalized_expression <- DoHeatmap(SO2, features = top10$gene, slot = "data")
+ggsave("15B.heatmap_normalized_expression_high_res02.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
+
+#Cell annotation
+ref = BlueprintEncodeData()
+ref
+
+sce = as.SingleCellExperiment(SO2)
+pred = SingleR(sce, ref=ref, labels=ref$label.main)
+table(pred$labels)
+cluster_markers <- print(top10, n = Inf)
+
+table_celltypes_bycluster = table(Assigned=pred$pruned.labels,
+                                  cluster=sce$seurat_clusters)
+table_celltypes_bycluster
+
+pheatmap(log2(table_celltypes_bycluster + 1), filename = "16.CellAnnotation_pheatmap.png")
+
+write.csv(cluster_markers, file = "Top10Markers_perCluster.csv", row.names = FALSE)
+
+SO3 <- SO2
+SO3@meta.data$label <- pred$labels
+umap_plot <- DimPlot(SO3, reduction = "umap")
+ggsave("19C.umap_plot_high_res01.png", plot = umap_plot, width = 10, height = 8, dpi = 300)
+
+umap_plot_stype <- DimPlot(SO4, reduction = "umap",group.by = "label")
+ggsave("19.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
+
+scPlot <- FeaturePlot(SO4, features=c("CD3D","GZMB","GNLY","CD8A"))
+ggsave("19A.umap_plot_CD8.png", plot = scPlot, width = 10, height = 8, dpi = 300)
+scPlot <- FeaturePlot(SO4, features=c("CD3D","IL7R","CD4"))
+ggsave("19B.umap_plot_CD4.png", plot = scPlot, width = 10, height = 8, dpi = 300)
+
+SO4<-SO4[,as.vector(SO4@meta.data$label !="Endothelial cells")]
+SO4<-SO4[,as.vector(SO4@meta.data$label !="Eosinophils")]
+SO4<-SO4[,as.vector(SO4@meta.data$label !="Erythrocytes")]
+SO4<-SO4[,as.vector(SO4@meta.data$label !="HSC")]
+SO4<-SO4[,as.vector(SO4@meta.data$label !="Macrophages")]
+SO4<-SO4[,as.vector(SO4@meta.data$label !="DC")]
+
+SO4
+umap_plot_dpi <- DimPlot(SO4, reduction = "umap",group.by = "DPI")
+umap_plot_cell <- DimPlot(SO4, reduction = "umap",group.by = "cell")
+umap_plot_animal <- DimPlot(SO4, reduction = "umap",group.by = "animal")
+umap_plot_stype <- DimPlot(SO4, reduction = "umap",group.by = "sample_type")
+ggsave("20A.umap_plot_high_res_dpi.png", plot = umap_plot_dpi, width = 10, height = 8, dpi = 300)
+ggsave("20B.umap_plot_high_res_cell.png", plot = umap_plot_cell, width = 10, height = 8, dpi = 300)
+ggsave("20C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10, height = 8, dpi = 300)
+ggsave("20D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
+
+
+##Manual Cell Annotation
+
+
+# Finding differentially expressed features (cluster markers)
+levels(SO4)
+SO4.markers <- FindAllMarkers(SO4, only.pos = TRUE, min.pct = 0.25, test.use="negbinom", slot="counts")
+#seuratObject.markers <- FindAllMarkers(seuratObject, only.pos = TRUE, min.pct = 0.25, test.use="wilcox")
+
+
+SO4.markers %>% group_by(label) %>% slice_max(n = 2, order_by = avg_log2FC)
+filtered_markers <- SO4.markers[SO4.markers$avg_log2FC > 2 & SO4.markers$p_val_adj < 0.05, ]
+SO4.markers
+write.csv(filtered_markers, file = "Significative_markers_nodogs_cellannot.csv", row.names = FALSE)
+
+SO4.markers %>% group_by(label) %>% top_n(n = 10, wt = avg_log2FC) -> top10
+
+# Generate the heatmap for raw counts
+heatmap_raw_counts <- DoHeatmap(SO4, features = top10$gene, slot = "counts")
+ggsave("21A.heatmap_raw_counts_high_res02.png", plot = heatmap_raw_counts, width = 10, height = 8, dpi = 300)
+
+# Generate the heatmap for normalized expression
+heatmap_normalized_expression <- DoHeatmap(SO2, features = top10$gene, slot = "data")
+ggsave("21B.heatmap_normalized_expression_high_res02.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
+
+scPlot <- DoHeatmap(SO4, features = c("MX1", "MIX2","IFIT1","IFIT2","IFIT3","IRF1","IRF7","IRF9","IFI16","ISG15","STAT1","STAT2")) + NoLegend()
+ggsave("21C.heatmap_interferonGenes.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
 
 #Batch correction
 options(repr.plot.height = 4, repr.plot.width = 6)
