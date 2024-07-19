@@ -469,6 +469,7 @@ ggsave("20C.umap_plot_high_res_animal.png", plot = umap_plot_animal, width = 10,
 ggsave("20D.umap_plot_high_res_stype.png", plot = umap_plot_stype, width = 10, height = 8, dpi = 300)
 
 
+
 ##Manual Cell Annotation
 
 
@@ -496,6 +497,8 @@ ggsave("21B.heatmap_normalized_expression_high_res02.png", plot = heatmap_normal
 scPlot <- DoHeatmap(SO4, features = c("MX1", "MIX2","IFIT1","IFIT2","IFIT3","IRF1","IRF7","IRF9","IFI16","ISG15","STAT1","STAT2")) + NoLegend()
 ggsave("21C.heatmap_interferonGenes.png", plot = heatmap_normalized_expression, width = 10, height = 8, dpi = 300)
 
+
+##OLD INFO
 #Batch correction
 options(repr.plot.height = 4, repr.plot.width = 6)
 SOharmony <- SO %>%
